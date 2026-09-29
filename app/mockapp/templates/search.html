@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MockCore - Member Search</title>
+</head>
+
+<body>
+
+    <h2>MockCore Banking Administration</h2>
+
+    <form method="POST" action="/member">
+
+        <label for="member_id">
+            Member ID
+        </label>
+
+        <input
+            type="text"
+            id="member_id"
+            name="member_id"
+        >
+
+        <button type="submit">
+            Search
+        </button>
+
+    </form>
+
+    {% if error %}
+        <p>
+            <strong>{{ error }}</strong>
+        </p>
+    {% endif %}
+
+</body>
+</html>

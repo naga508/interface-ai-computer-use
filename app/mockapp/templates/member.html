@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MockCore - Member Details</title>
+</head>
+
+<body>
+
+    <h2>Member Details</h2>
+
+    <p>
+        Member ID: {{ member_id }}
+    </p>
+
+    <p>
+        Name: {{ member.name }}
+    </p>
+
+    <p>
+        Checking Balance:
+        ${{ "%.2f"|format(member.checking_balance) }}
+    </p>
+
+    <p>
+        Savings Balance:
+        ${{ "%.2f"|format(member.savings_balance) }}
+    </p>
+
+    <a href="/">
+        Back to Search
+    </a>
+
+</body>
+</html>
