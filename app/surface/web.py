@@ -1,38 +1,31 @@
 from datetime import datetime
 from pathlib import Path
-from app.safety.allowlist import SafetyPolicy
+
 from playwright.sync_api import sync_playwright
 
-from app.surface.base import (
-    Action,
-    ActionResult,
-    Observation,
-    Surface,
-    Target,
-)
+from app.safety.allowlist import SafetyPolicy
+from app.surface.base import Action, ActionResult, Observation, Surface, Target
 
 
 class WebSurface(Surface):
 
-    def __init__(self, headless: bool = False):
+    def __init__(self, headless: bool = False, safety_policy: SafetyPolicy | None = None):
+        self.safety_policy = safety_policy or SafetyPolicy()
+
         self.playwright = sync_playwright().start()
-
-        self.browser = self.playwright.chromium.launch(
-            headless=headless
-        )
-
+        self.browser = self.playwright.chromium.launch(headless=headless)
         self.context = self.browser.new_context()
-
         self.page = self.context.new_page()
 
     def _resolve_target(self, target: Target):
+
         if target.strategy == "label":
             return self.page.get_by_label(target.value)
 
         if target.strategy == "role":
             if not target.role:
                 raise ValueError(
-                    "Role must be provided for role strategy"
+                    "Role must be provided when using role strategy."
                 )
 
             return self.page.get_by_role(
@@ -51,9 +44,8 @@ class WebSurface(Surface):
         )
 
     def perceive(self) -> Observation:
-        screenshot_directory = Path(
-            "evidence/screenshots"
-        )
+
+        screenshot_directory = Path("evidence/screenshots")
 
         screenshot_directory.mkdir(
             parents=True,
@@ -76,16 +68,12 @@ class WebSurface(Surface):
 
         try:
             accessibility_snapshot = (
-                self.page
-                .locator("body")
-                .aria_snapshot()
+                self.page.locator("body").aria_snapshot()
             )
 
         except Exception:
             accessibility_snapshot = (
-                self.page
-                .locator("body")
-                .inner_text()
+                self.page.locator("body").inner_text()
             )
 
         return Observation(
@@ -96,12 +84,27 @@ class WebSurface(Surface):
         )
 
     def act(self, action: Action) -> ActionResult:
+
         try:
+            safety_decision = self.safety_policy.check(
+                action=action,
+                current_url=self.page.url,
+            )
+
+            if not safety_decision.allowed:
+                return ActionResult(
+                    success=False,
+                    error=(
+                        "SAFETY_BLOCKED: "
+                        + safety_decision.reason
+                    ),
+                )
 
             if action.action == "navigate":
+
                 if not action.value:
                     raise ValueError(
-                        "Navigate requires a URL"
+                        "Navigate action requires a URL."
                     )
 
                 self.page.goto(action.value)
@@ -112,7 +115,7 @@ class WebSurface(Surface):
 
             if action.target is None:
                 raise ValueError(
-                    f"{action.action} requires a target"
+                    f"{action.action} action requires a target."
                 )
 
             locator = self._resolve_target(
@@ -120,9 +123,10 @@ class WebSurface(Surface):
             )
 
             if action.action == "type":
+
                 if action.value is None:
                     raise ValueError(
-                        "Type action requires a value"
+                        "Type action requires a value."
                     )
 
                 locator.fill(action.value)
@@ -132,6 +136,7 @@ class WebSurface(Surface):
                 )
 
             if action.action == "click":
+
                 locator.click()
 
                 return ActionResult(
@@ -139,6 +144,7 @@ class WebSurface(Surface):
                 )
 
             if action.action == "read":
+
                 text = locator.inner_text()
 
                 return ActionResult(
@@ -147,6 +153,7 @@ class WebSurface(Surface):
                 )
 
             if action.action == "wait_for":
+
                 locator.wait_for()
 
                 return ActionResult(
@@ -158,12 +165,14 @@ class WebSurface(Surface):
             )
 
         except Exception as exc:
+
             return ActionResult(
                 success=False,
                 error=str(exc),
             )
 
     def close(self) -> None:
+
         self.context.close()
         self.browser.close()
         self.playwright.stop()
