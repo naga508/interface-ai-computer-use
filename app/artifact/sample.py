@@ -7,6 +7,7 @@ from app.artifact.schema import (
     OutputSpec,
     ParamRef,
     ParamSpec,
+    RetryPolicy,
     Step,
     TargetSpec,
 )
@@ -56,20 +57,33 @@ def build_lookup_member_balance_capability() -> Capability:
         ],
 
         steps=[
+            # -------------------------------------------------
+            # STEP 1: OPEN MOCKCORE
+            # -------------------------------------------------
             Step(
                 index=1,
-                intent="Open the MockCore member search page.",
+                intent=(
+                    "Open the MockCore "
+                    "member search page."
+                ),
                 action="navigate",
                 value="http://127.0.0.1:5000",
             ),
 
+            # -------------------------------------------------
+            # STEP 2: ENTER MEMBER ID
+            # -------------------------------------------------
             Step(
                 index=2,
-                intent="Enter the requested member ID.",
+                intent=(
+                    "Enter the requested member ID."
+                ),
                 action="type",
 
                 target=ElementTarget(
-                    description="Member ID input field.",
+                    description=(
+                        "Member ID input field."
+                    ),
 
                     reasoning=(
                         "Accessible textbox name is "
@@ -100,17 +114,25 @@ def build_lookup_member_balance_capability() -> Capability:
                 ),
             ),
 
+            # -------------------------------------------------
+            # STEP 3: SEARCH
+            # -------------------------------------------------
             Step(
                 index=3,
-                intent="Submit the member search.",
+                intent=(
+                    "Submit the member search."
+                ),
                 action="click",
 
                 target=ElementTarget(
-                    description="Search button.",
+                    description=(
+                        "Search button."
+                    ),
 
                     reasoning=(
                         "The accessible button role "
-                        "and name identify this control."
+                        "and name provide a stable "
+                        "locator."
                     ),
 
                     primary=Locator(
@@ -131,6 +153,7 @@ def build_lookup_member_balance_capability() -> Capability:
                     ],
                 ),
 
+                # What should appear when search succeeds.
                 checkpoint=Checkpoint(
                     type="text_present",
                     spec={
@@ -138,7 +161,25 @@ def build_lookup_member_balance_capability() -> Capability:
                     },
                 ),
 
+                # Runtime states that may appear instead.
                 on_error=[
+                    # -----------------------------------------
+                    # RECOVERABLE: TEMPORARY SLOW LOAD
+                    # -----------------------------------------
+                    ErrorRule(
+                        match=Checkpoint(
+                            type="text_present",
+                            spec={
+                                "text": "Loading member"
+                            },
+                        ),
+                        classify="recoverable",
+                        recovery="retry",
+                    ),
+
+                    # -----------------------------------------
+                    # EXPECTED BUSINESS OUTCOME
+                    # -----------------------------------------
                     ErrorRule(
                         match=Checkpoint(
                             type="text_present",
@@ -154,10 +195,19 @@ def build_lookup_member_balance_capability() -> Capability:
                         outcome_code=(
                             "MEMBER_NOT_FOUND"
                         ),
-                    )
+                    ),
                 ],
+
+                # Retry when a recoverable condition appears.
+                retry=RetryPolicy(
+                    max_attempts=5,
+                    backoff_ms=500,
+                ),
             ),
 
+            # -------------------------------------------------
+            # STEP 4: READ SAVINGS BALANCE
+            # -------------------------------------------------
             Step(
                 index=4,
                 intent=(
@@ -172,8 +222,9 @@ def build_lookup_member_balance_capability() -> Capability:
                     ),
 
                     reasoning=(
-                        "The visible Savings Balance "
-                        "text identifies the value."
+                        "Visible Savings Balance "
+                        "text identifies the "
+                        "required value."
                     ),
 
                     primary=Locator(
@@ -190,6 +241,7 @@ def build_lookup_member_balance_capability() -> Capability:
             ),
         ],
 
+        # Overall replay success condition.
         success_condition=Checkpoint(
             type="text_present",
             spec={

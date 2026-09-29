@@ -51,7 +51,7 @@ def test_artifact_save_and_load(
     )
 
 
-def test_member_not_found_rule_exists():
+def test_search_error_rules_exist():
 
     capability = (
         build_lookup_member_balance_capability()
@@ -61,18 +61,46 @@ def test_member_not_found_rule_exists():
 
     assert len(
         search_step.on_error
-    ) == 1
+    ) == 2
 
-    error_rule = (
-        search_step.on_error[0]
+    recoverable_rule = next(
+        rule
+        for rule in search_step.on_error
+        if rule.classify == "recoverable"
+    )
+
+    business_rule = next(
+        rule
+        for rule in search_step.on_error
+        if rule.classify == "business_outcome"
     )
 
     assert (
-        error_rule.classify
-        == "business_outcome"
+        recoverable_rule.recovery
+        == "retry"
     )
 
     assert (
-        error_rule.outcome_code
+        recoverable_rule.match.spec["text"]
+        == "Loading member"
+    )
+
+    assert (
+        business_rule.outcome_code
         == "MEMBER_NOT_FOUND"
+    )
+
+    assert (
+        business_rule.match.spec["text"]
+        == "No member found"
+    )
+
+    assert (
+        search_step.retry.max_attempts
+        == 5
+    )
+
+    assert (
+        search_step.retry.backoff_ms
+        == 500
     )

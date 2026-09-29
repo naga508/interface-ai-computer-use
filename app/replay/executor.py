@@ -1,3 +1,4 @@
+import time
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -5,7 +6,6 @@ from pydantic import BaseModel, Field
 from app.artifact.schema import (
     Capability,
     Checkpoint,
-    ElementTarget,
     Locator,
     ParamRef,
     Step,
@@ -51,7 +51,7 @@ class ReplayExecutor:
         self.surface = surface
 
     # -----------------------------------------------------
-    # PUBLIC ENTRY POINT
+    # MAIN REPLAY ENTRY POINT
     # -----------------------------------------------------
 
     def replay(
@@ -87,6 +87,7 @@ class ReplayExecutor:
                     detail=result.error,
                 )
 
+            # Capture declared outputs.
             if (
                 step.action == "read"
                 and step.output_name
@@ -95,7 +96,9 @@ class ReplayExecutor:
                     step.output_name
                 ] = result.data
 
+            # Verify step checkpoint.
             if step.checkpoint:
+
                 checkpoint_ok = (
                     self._check_checkpoint(
                         step.checkpoint
@@ -105,33 +108,16 @@ class ReplayExecutor:
                 if not checkpoint_ok:
 
                     error_result = (
-                        self._handle_error_rules(
-                            step=step
+                        self._handle_checkpoint_failure(
+                            step
                         )
                     )
 
-                    if error_result:
+                    # None means recovery succeeded.
+                    if error_result is not None:
                         return error_result
 
-                    observation = (
-                        self.surface.perceive()
-                    )
-
-                    return ReplayResult(
-                        status="FAILURE",
-                        step_index=step.index,
-                        expected=(
-                            str(step.checkpoint)
-                        ),
-                        observed=(
-                            observation
-                            .accessibility_snapshot
-                        ),
-                        detail=(
-                            "Step checkpoint failed."
-                        ),
-                    )
-
+        # Verify overall capability success.
         final_success = self._check_checkpoint(
             capability.success_condition
         )
@@ -189,7 +175,7 @@ class ReplayExecutor:
         return None
 
     # -----------------------------------------------------
-    # STEP EXECUTION
+    # EXECUTE ONE STEP
     # -----------------------------------------------------
 
     def _execute_step(
@@ -241,7 +227,7 @@ class ReplayExecutor:
         )
 
     # -----------------------------------------------------
-    # PARAMETER RESOLUTION
+    # PARAMETER SUBSTITUTION
     # -----------------------------------------------------
 
     def _resolve_value(
@@ -254,6 +240,7 @@ class ReplayExecutor:
             value,
             ParamRef,
         ):
+
             if value.param not in params:
                 raise ValueError(
                     "Parameter not provided: "
@@ -267,7 +254,7 @@ class ReplayExecutor:
         return value
 
     # -----------------------------------------------------
-    # LOCATOR RESOLUTION
+    # TARGET / LOCATOR RESOLUTION
     # -----------------------------------------------------
 
     def _execute_with_locators(
@@ -296,8 +283,7 @@ class ReplayExecutor:
             if target is None:
                 errors.append(
                     "Unsupported locator "
-                    f"strategy: "
-                    f"{locator.strategy}"
+                    f"strategy: {locator.strategy}"
                 )
                 continue
 
@@ -326,8 +312,7 @@ class ReplayExecutor:
         return ActionResult(
             success=False,
             error=(
-                "All locator strategies "
-                "failed. "
+                "All locator strategies failed. "
                 + " | ".join(errors)
             ),
         )
@@ -341,6 +326,7 @@ class ReplayExecutor:
             locator.strategy
             == "a11y_role_name"
         ):
+
             role = locator.value.get(
                 "role"
             )
@@ -372,13 +358,12 @@ class ReplayExecutor:
                 value=text,
             )
 
-        # Other strategies such as attr,
-        # css, xpath, relative and visual
-        # will be added later.
+        # attr/css/xpath/relative/visual
+        # can be implemented later.
         return None
 
     # -----------------------------------------------------
-    # CHECKPOINTS
+    # CHECKPOINT EVALUATION
     # -----------------------------------------------------
 
     def _check_checkpoint(
@@ -390,10 +375,8 @@ class ReplayExecutor:
             self.surface.perceive()
         )
 
-        if (
-            checkpoint.type
-            == "text_present"
-        ):
+        if checkpoint.type == "text_present":
+
             expected_text = (
                 checkpoint.spec.get(
                     "text"
@@ -409,10 +392,8 @@ class ReplayExecutor:
                 .accessibility_snapshot
             )
 
-        if (
-            checkpoint.type
-            == "url_matches"
-        ):
+        if checkpoint.type == "url_matches":
+
             expected_url = (
                 checkpoint.spec.get(
                     "pattern"
@@ -430,10 +411,8 @@ class ReplayExecutor:
                 in observation.url
             )
 
-        if (
-            checkpoint.type
-            == "element_present"
-        ):
+        if checkpoint.type == "element_present":
+
             expected = (
                 checkpoint.spec.get(
                     "text"
@@ -455,10 +434,10 @@ class ReplayExecutor:
         return False
 
     # -----------------------------------------------------
-    # ERROR RULES
+    # CHECKPOINT FAILURE / ERROR TAXONOMY
     # -----------------------------------------------------
 
-    def _handle_error_rules(
+    def _handle_checkpoint_failure(
         self,
         step: Step,
     ) -> ReplayResult | None:
@@ -474,14 +453,17 @@ class ReplayExecutor:
             if not matched:
                 continue
 
+            # ---------------------------------------------
+            # EXPECTED BUSINESS OUTCOME
+            # ---------------------------------------------
+
             if (
                 rule.classify
                 == "business_outcome"
             ):
+
                 return ReplayResult(
-                    status=(
-                        "BUSINESS_OUTCOME"
-                    ),
+                    status="BUSINESS_OUTCOME",
                     outcome_code=(
                         rule.outcome_code
                     ),
@@ -492,10 +474,66 @@ class ReplayExecutor:
                     ),
                 )
 
+            # ---------------------------------------------
+            # RECOVERABLE CONDITION
+            # ---------------------------------------------
+
+            if (
+                rule.classify
+                == "recoverable"
+            ):
+
+                if rule.recovery == "retry":
+
+                    for _ in range(
+                        step.retry.max_attempts
+                    ):
+
+                        if (
+                            step.retry.backoff_ms
+                            > 0
+                        ):
+                            time.sleep(
+                                step.retry.backoff_ms
+                                / 1000
+                            )
+
+                        if (
+                            step.checkpoint
+                            and self._check_checkpoint(
+                                step.checkpoint
+                            )
+                        ):
+                            # Recovery succeeded.
+                            return None
+
+                    return ReplayResult(
+                        status="FAILURE",
+                        step_index=step.index,
+                        detail=(
+                            "Recoverable condition "
+                            "exceeded retry limit."
+                        ),
+                    )
+
+                return ReplayResult(
+                    status="FAILURE",
+                    step_index=step.index,
+                    detail=(
+                        "Unsupported recovery action: "
+                        f"{rule.recovery}"
+                    ),
+                )
+
+            # ---------------------------------------------
+            # HARD FAILURE
+            # ---------------------------------------------
+
             if (
                 rule.classify
                 == "hard_failure"
             ):
+
                 return ReplayResult(
                     status="FAILURE",
                     step_index=step.index,
@@ -506,4 +544,22 @@ class ReplayExecutor:
                     ),
                 )
 
-        return None
+        # No declared rule matched.
+        observation = (
+            self.surface.perceive()
+        )
+
+        return ReplayResult(
+            status="FAILURE",
+            step_index=step.index,
+            expected=str(
+                step.checkpoint
+            ),
+            observed=(
+                observation
+                .accessibility_snapshot
+            ),
+            detail=(
+                "Step checkpoint failed."
+            ),
+        )

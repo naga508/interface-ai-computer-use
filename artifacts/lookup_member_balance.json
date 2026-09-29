@@ -82,7 +82,7 @@
       "action": "click",
       "target": {
         "description": "Search button.",
-        "reasoning": "The accessible button role and name identify this control.",
+        "reasoning": "The accessible button role and name provide a stable locator.",
         "primary": {
           "strategy": "a11y_role_name",
           "value": {
@@ -112,6 +112,17 @@
           "match": {
             "type": "text_present",
             "spec": {
+              "text": "Loading member"
+            }
+          },
+          "classify": "recoverable",
+          "outcome_code": null,
+          "recovery": "retry"
+        },
+        {
+          "match": {
+            "type": "text_present",
+            "spec": {
               "text": "No member found"
             }
           },
@@ -122,8 +133,8 @@
       ],
       "timeout_ms": 5000,
       "retry": {
-        "max_attempts": 1,
-        "backoff_ms": 0
+        "max_attempts": 5,
+        "backoff_ms": 500
       }
     },
     {
@@ -132,7 +143,7 @@
       "action": "read",
       "target": {
         "description": "Savings Balance row.",
-        "reasoning": "The visible Savings Balance text identifies the value.",
+        "reasoning": "Visible Savings Balance text identifies the required value.",
         "primary": {
           "strategy": "text",
           "value": {
@@ -164,7 +175,7 @@
   },
   "approval_state": "draft",
   "metadata": {
-    "created_at": "2026-09-29T02:10:16.439876Z",
+    "created_at": "2026-09-29T02:40:19.632424Z",
     "model_used": null,
     "discovery_run_id": null,
     "stability_score": null

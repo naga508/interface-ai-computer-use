@@ -202,3 +202,55 @@ def test_replay_hard_failure_when_locator_cannot_resolve():
 
     finally:
         surface.close()
+
+def test_replay_recovers_from_slow_load():
+
+    capability = (
+        build_lookup_member_balance_capability()
+    )
+
+    surface = WebSurface(
+        headless=False
+    )
+
+    executor = ReplayExecutor(
+        surface=surface
+    )
+
+    try:
+        result = executor.replay(
+            capability=capability,
+            params={
+                "member_id": "55555"
+            },
+        )
+
+        print(
+            "\nRecoverable condition result:"
+        )
+
+        print(
+            result.model_dump_json(
+                indent=2
+            )
+        )
+
+        assert (
+            result.status
+            == "SUCCESS"
+        )
+
+        assert (
+            "savings_balance"
+            in result.outputs
+        )
+
+        assert (
+            "6100.50"
+            in result.outputs[
+                "savings_balance"
+            ]
+        )
+
+    finally:
+        surface.close()
