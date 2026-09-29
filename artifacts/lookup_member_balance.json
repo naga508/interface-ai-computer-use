@@ -1,0 +1,172 @@
+{
+  "schema_version": "1.0",
+  "capability_id": "lookup-member-balance-v1",
+  "name": "lookup_member_balance",
+  "description": "Look up a member by ID in MockCore and return their current savings balance.",
+  "target": {
+    "vendor_app_id": "mockcore",
+    "version_range": "1.x",
+    "base_url_pattern": "http://127.0.0.1:5000"
+  },
+  "input_parameters": [
+    {
+      "name": "member_id",
+      "type": "string",
+      "required": true,
+      "description": "Member identifier used for account lookup.",
+      "example": "12345",
+      "sensitive": true
+    }
+  ],
+  "outputs": [
+    {
+      "name": "savings_balance",
+      "type": "string",
+      "description": "Current savings balance shown on the member details page."
+    }
+  ],
+  "steps": [
+    {
+      "index": 1,
+      "intent": "Open the MockCore member search page.",
+      "action": "navigate",
+      "target": null,
+      "value": "http://127.0.0.1:5000",
+      "output_name": null,
+      "checkpoint": null,
+      "on_error": [],
+      "timeout_ms": 5000,
+      "retry": {
+        "max_attempts": 1,
+        "backoff_ms": 0
+      }
+    },
+    {
+      "index": 2,
+      "intent": "Enter the requested member ID.",
+      "action": "type",
+      "target": {
+        "description": "Member ID input field.",
+        "reasoning": "Accessible textbox name is preferred because it is more stable than DOM position.",
+        "primary": {
+          "strategy": "a11y_role_name",
+          "value": {
+            "role": "textbox",
+            "name": "Member ID"
+          }
+        },
+        "fallbacks": [
+          {
+            "strategy": "attr",
+            "value": {
+              "name": "member_id"
+            }
+          }
+        ]
+      },
+      "value": {
+        "param": "member_id"
+      },
+      "output_name": null,
+      "checkpoint": null,
+      "on_error": [],
+      "timeout_ms": 5000,
+      "retry": {
+        "max_attempts": 1,
+        "backoff_ms": 0
+      }
+    },
+    {
+      "index": 3,
+      "intent": "Submit the member search.",
+      "action": "click",
+      "target": {
+        "description": "Search button.",
+        "reasoning": "The accessible button role and name identify this control.",
+        "primary": {
+          "strategy": "a11y_role_name",
+          "value": {
+            "role": "button",
+            "name": "Search"
+          }
+        },
+        "fallbacks": [
+          {
+            "strategy": "text",
+            "value": {
+              "text": "Search"
+            }
+          }
+        ]
+      },
+      "value": null,
+      "output_name": null,
+      "checkpoint": {
+        "type": "text_present",
+        "spec": {
+          "text": "Member Details"
+        }
+      },
+      "on_error": [
+        {
+          "match": {
+            "type": "text_present",
+            "spec": {
+              "text": "No member found"
+            }
+          },
+          "classify": "business_outcome",
+          "outcome_code": "MEMBER_NOT_FOUND",
+          "recovery": null
+        }
+      ],
+      "timeout_ms": 5000,
+      "retry": {
+        "max_attempts": 1,
+        "backoff_ms": 0
+      }
+    },
+    {
+      "index": 4,
+      "intent": "Read the member's savings balance.",
+      "action": "read",
+      "target": {
+        "description": "Savings Balance row.",
+        "reasoning": "The visible Savings Balance text identifies the value.",
+        "primary": {
+          "strategy": "text",
+          "value": {
+            "text": "Savings Balance"
+          }
+        },
+        "fallbacks": []
+      },
+      "value": null,
+      "output_name": "savings_balance",
+      "checkpoint": null,
+      "on_error": [],
+      "timeout_ms": 5000,
+      "retry": {
+        "max_attempts": 1,
+        "backoff_ms": 0
+      }
+    }
+  ],
+  "success_condition": {
+    "type": "text_present",
+    "spec": {
+      "text": "Member Details"
+    }
+  },
+  "policy": {
+    "profile": "default",
+    "allow_irreversible": false
+  },
+  "approval_state": "draft",
+  "metadata": {
+    "created_at": "2026-09-29T02:10:16.439876Z",
+    "model_used": null,
+    "discovery_run_id": null,
+    "stability_score": null
+  }
+}
