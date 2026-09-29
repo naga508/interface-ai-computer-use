@@ -10,6 +10,9 @@ from app.artifact.schema import (
     ParamRef,
     Step,
 )
+from app.escalation.session import (
+    SessionController,
+)
 from app.surface.base import (
     Action,
     ActionResult,
@@ -33,13 +36,9 @@ class ReplayResult(BaseModel):
     )
 
     outcome_code: str | None = None
-
     detail: str | None = None
-
     step_index: int | None = None
-
     expected: str | None = None
-
     observed: str | None = None
 
 
@@ -47,8 +46,10 @@ class ReplayExecutor:
     def __init__(
         self,
         surface: Surface,
+        session_controller: SessionController | None = None,
     ):
         self.surface = surface
+        self.session_controller = session_controller
 
     # -----------------------------------------------------
     # MAIN REPLAY ENTRY POINT
@@ -113,11 +114,16 @@ class ReplayExecutor:
                         )
                     )
 
-                    # None means recovery succeeded.
+                    # None means:
+                    # recovery or human handoff succeeded,
+                    # so replay can continue.
                     if error_result is not None:
                         return error_result
 
-        # Verify overall capability success.
+        # -------------------------------------------------
+        # FINAL CAPABILITY SUCCESS CHECK
+        # -------------------------------------------------
+
         final_success = self._check_checkpoint(
             capability.success_condition
         )
@@ -189,6 +195,10 @@ class ReplayExecutor:
             params=params,
         )
 
+        # ---------------------------------------------
+        # NAVIGATE
+        # ---------------------------------------------
+
         if step.action == "navigate":
 
             return self.surface.act(
@@ -197,6 +207,10 @@ class ReplayExecutor:
                     value=str(value),
                 )
             )
+
+        # ---------------------------------------------
+        # SUPPORTED ACTIONS
+        # ---------------------------------------------
 
         if step.action not in {
             "click",
@@ -254,7 +268,7 @@ class ReplayExecutor:
         return value
 
     # -----------------------------------------------------
-    # TARGET / LOCATOR RESOLUTION
+    # LOCATOR EXECUTION
     # -----------------------------------------------------
 
     def _execute_with_locators(
@@ -317,6 +331,10 @@ class ReplayExecutor:
             ),
         )
 
+    # -----------------------------------------------------
+    # ARTIFACT LOCATOR -> SURFACE TARGET
+    # -----------------------------------------------------
+
     def _locator_to_surface_target(
         self,
         locator: Locator,
@@ -375,6 +393,10 @@ class ReplayExecutor:
             self.surface.perceive()
         )
 
+        # ---------------------------------------------
+        # TEXT PRESENT
+        # ---------------------------------------------
+
         if checkpoint.type == "text_present":
 
             expected_text = (
@@ -391,6 +413,10 @@ class ReplayExecutor:
                 in observation
                 .accessibility_snapshot
             )
+
+        # ---------------------------------------------
+        # URL MATCH
+        # ---------------------------------------------
 
         if checkpoint.type == "url_matches":
 
@@ -410,6 +436,10 @@ class ReplayExecutor:
                 expected_url
                 in observation.url
             )
+
+        # ---------------------------------------------
+        # ELEMENT PRESENT
+        # ---------------------------------------------
 
         if checkpoint.type == "element_present":
 
@@ -434,13 +464,17 @@ class ReplayExecutor:
         return False
 
     # -----------------------------------------------------
-    # CHECKPOINT FAILURE / ERROR TAXONOMY
+    # CHECKPOINT FAILURE HANDLING
     # -----------------------------------------------------
 
     def _handle_checkpoint_failure(
         self,
         step: Step,
     ) -> ReplayResult | None:
+
+        # -------------------------------------------------
+        # FIRST: CHECK DECLARED ERROR RULES
+        # -------------------------------------------------
 
         for rule in step.on_error:
 
@@ -526,7 +560,7 @@ class ReplayExecutor:
                 )
 
             # ---------------------------------------------
-            # HARD FAILURE
+            # DECLARED HARD FAILURE
             # ---------------------------------------------
 
             if (
@@ -544,7 +578,42 @@ class ReplayExecutor:
                     ),
                 )
 
-        # No declared rule matched.
+        # -------------------------------------------------
+        # NO DECLARED RULE MATCHED
+        #
+        # IF A HUMAN SESSION CONTROLLER EXISTS,
+        # ESCALATE IN THE SAME LIVE BROWSER SESSION.
+        # -------------------------------------------------
+
+        if self.session_controller is not None:
+
+            self.session_controller.handoff(
+                surface=self.surface,
+                reason=(
+                    "Automation reached an "
+                    "unexpected UI state and "
+                    "cannot safely continue "
+                    "automatically."
+                ),
+                step_index=step.index,
+            )
+
+            # After the human completes the
+            # required action in the SAME browser
+            # session, check whether the expected
+            # state now exists.
+            if (
+                step.checkpoint
+                and self._check_checkpoint(
+                    step.checkpoint
+                )
+            ):
+                return None
+
+        # -------------------------------------------------
+        # HARD FAILURE
+        # -------------------------------------------------
+
         observation = (
             self.surface.perceive()
         )

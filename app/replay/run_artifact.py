@@ -1,6 +1,7 @@
 import argparse
 
 from app.artifact.store import ArtifactStore
+from app.escalation.session import SessionController
 from app.replay.executor import ReplayExecutor
 from app.surface.web import WebSurface
 
@@ -20,15 +21,13 @@ def main():
 
     parser.add_argument(
         "member_id",
-        help=(
-            "Member ID to look up."
-        ),
+        help="Member ID to look up.",
     )
 
     args = parser.parse_args()
 
     # -------------------------------------------------
-    # LOAD GENERATED ARTIFACT
+    # LOAD GENERATED CAPABILITY ARTIFACT
     # -------------------------------------------------
 
     store = ArtifactStore()
@@ -40,11 +39,9 @@ def main():
     print(
         "\n================================="
     )
-
     print(
         "DETERMINISTIC REPLAY"
     )
-
     print(
         "================================="
     )
@@ -62,15 +59,32 @@ def main():
     )
 
     # -------------------------------------------------
-    # CREATE BROWSER SURFACE
+    # CREATE LIVE BROWSER SESSION
     # -------------------------------------------------
 
     surface = WebSurface(
         headless=False
     )
 
+    # -------------------------------------------------
+    # HUMAN HANDOFF CONTROLLER
+    #
+    # If replay reaches an unexpected UI state,
+    # automation pauses but this SAME browser
+    # session stays open.
+    # -------------------------------------------------
+
+    session_controller = SessionController(
+        interactive=True
+    )
+
+    # -------------------------------------------------
+    # CREATE DETERMINISTIC REPLAY EXECUTOR
+    # -------------------------------------------------
+
     executor = ReplayExecutor(
-        surface=surface
+        surface=surface,
+        session_controller=session_controller,
     )
 
     try:
@@ -82,20 +96,16 @@ def main():
         result = executor.replay(
             capability=capability,
             params={
-                "member_id": (
-                    args.member_id
-                )
+                "member_id": args.member_id
             },
         )
 
         print(
             "\n================================="
         )
-
         print(
             "REPLAY RESULT"
         )
-
         print(
             "=================================\n"
         )
@@ -106,9 +116,14 @@ def main():
             )
         )
 
-        # Non-zero process exit for actual failures.
-        # A business outcome is still an expected
-        # application result, not an automation crash.
+        print(
+            "\nHuman handoffs:"
+            f" {session_controller.handoff_count}"
+        )
+
+        # A business outcome is expected application
+        # behavior, so only a true automation FAILURE
+        # should produce a non-zero exit status.
         if result.status == "FAILURE":
             raise SystemExit(1)
 
