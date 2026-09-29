@@ -28,7 +28,7 @@
   "steps": [
     {
       "index": 1,
-      "intent": "Open the MockCore member search page.",
+      "intent": "Open the target application.",
       "action": "navigate",
       "target": null,
       "value": "http://127.0.0.1:5000",
@@ -43,11 +43,11 @@
     },
     {
       "index": 2,
-      "intent": "Enter the requested member ID.",
+      "intent": "Enter member_id.",
       "action": "type",
       "target": {
-        "description": "Member ID input field.",
-        "reasoning": "Accessible textbox name is preferred because it is more stable than DOM position.",
+        "description": "Input labeled 'Member ID'.",
+        "reasoning": "The form label is semantic and more robust than DOM position.",
         "primary": {
           "strategy": "a11y_role_name",
           "value": {
@@ -55,14 +55,7 @@
             "name": "Member ID"
           }
         },
-        "fallbacks": [
-          {
-            "strategy": "attr",
-            "value": {
-              "name": "member_id"
-            }
-          }
-        ]
+        "fallbacks": []
       },
       "value": {
         "param": "member_id"
@@ -78,11 +71,11 @@
     },
     {
       "index": 3,
-      "intent": "Submit the member search.",
+      "intent": "Submit the lookup.",
       "action": "click",
       "target": {
-        "description": "Search button.",
-        "reasoning": "The accessible button role and name provide a stable locator.",
+        "description": "button element named 'Search'.",
+        "reasoning": "Accessible role and name provide a semantic locator.",
         "primary": {
           "strategy": "a11y_role_name",
           "value": {
@@ -139,11 +132,11 @@
     },
     {
       "index": 4,
-      "intent": "Read the member's savings balance.",
+      "intent": "Read savings_balance.",
       "action": "read",
       "target": {
-        "description": "Savings Balance row.",
-        "reasoning": "Visible Savings Balance text identifies the required value.",
+        "description": "savings_balance field.",
+        "reasoning": "Use stable visible label text rather than a discovered member-specific value.",
         "primary": {
           "strategy": "text",
           "value": {
@@ -175,9 +168,9 @@
   },
   "approval_state": "draft",
   "metadata": {
-    "created_at": "2026-09-29T02:40:19.632424Z",
-    "model_used": null,
-    "discovery_run_id": null,
+    "created_at": "2026-09-29T03:55:18.395242Z",
+    "model_used": "gemini-3.5-flash-lite",
+    "discovery_run_id": "live-discovery-001",
     "stability_score": null
   }
 }
